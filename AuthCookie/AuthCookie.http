@@ -32,3 +32,22 @@ POST {{AuthCookie_HostAddress}}/auth/logout
 ### Проверка без cookie — ожидается 401
 GET {{AuthCookie_HostAddress}}/secure/data
 Accept: application/json
+
+### === JWT из AuthService ===
+
+### Получение JWT (прокси к AuthService /api/auth/login)
+### alice/secret1 — User, BranchId=B001; bob/secret2 — Admin, BranchId=HQ
+POST {{AuthCookie_HostAddress}}/api/bearer/login?userName=alice&password=secret1
+X-Forward-Base-Url: https://localhost:7208
+
+### Текущий пользователь по JWT (подставьте токен из ответа выше в @jwt)
+@jwt = PASTE_TOKEN_HERE
+
+GET {{AuthCookie_HostAddress}}/api/bearer/me
+Authorization: Bearer {{jwt}}
+Accept: application/json
+
+### Книги отдела B001 — политика CanViewBranchB001 (только alice)
+GET {{AuthCookie_HostAddress}}/api/bearer/branch-books
+Authorization: Bearer {{jwt}}
+Accept: application/json

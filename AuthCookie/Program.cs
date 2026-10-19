@@ -1,6 +1,9 @@
 using AuthCookie.Policies;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -8,7 +11,36 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    // Кнопка "Authorize" в Swagger: вставляем сюда JWT, полученный из AuthService
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Вставьте JWT-токен, полученный от AuthService /api/auth/login"
+    });
+
+    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+
+var jwt = builder.Configuration.GetSection("Jwt");
 
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
@@ -38,6 +70,24 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             context.Response.WriteAsJsonAsync(new { error = "Доступ запрещён" });
             return Task.CompletedTask;
         };
+    })
+    // Вторая схема аутентификации: JWT, выпущенный AuthService (общий секрет подписи).
+    // Cookie остаётся основной схемой: [Authorize] без явной схемы проверяет её,
+    // JWT требуется только там, где явно указан Scheme = JwtBearerDefaults.AuthenticationScheme.
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidIssuer = jwt["Issuer"],
+            ValidAudience = jwt["Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                System.Text.Encoding.UTF8.GetBytes(jwt["Secret"]!)),
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateIssuerSigningKey = true,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
     });
 
 builder.Services.AddAuthorization(options =>
@@ -45,6 +95,10 @@ builder.Services.AddAuthorization(options =>
     // Политика "FinanceDepartment": требует claim department=finance
     options.AddPolicy(PolicyNames.FinanceDepartment, policy =>
         policy.AddRequirements(new FinanceDepartmentRequirement()));
+
+    // Политика на claim'ы из JWT AuthService: видит книги отдела только BranchId=B001 (alice)
+    options.AddPolicy(PolicyNames.CanViewBranchB001, policy =>
+        policy.RequireClaim("BranchId", "B001"));
 });
 
 // Регистрация кастомного обработчика требований
