@@ -1,0 +1,34 @@
+@AuthCookie_HostAddress = http://localhost:5231
+
+### Вход: получаем cookie (admin)
+POST {{AuthCookie_HostAddress}}/auth/login
+Content-Type: application/json
+
+{
+  "userName": "admin",
+  "password": "admin123"
+}
+
+### Текущий пользователь (cookie подхватывается автоматически)
+GET {{AuthCookie_HostAddress}}/auth/me
+Accept: application/json
+
+### Защищённые данные (любой авторизованный)
+GET {{AuthCookie_HostAddress}}/secure/data
+Accept: application/json
+
+### Данные администратора (только роль Admin)
+GET {{AuthCookie_HostAddress}}/secure/admin
+Accept: application/json
+
+### Финансовый отчёт — политика FinanceDepartment (логин: fin/fin123)
+### Для других пользователей вернёт 403
+GET {{AuthCookie_HostAddress}}/auth/finance-report
+Accept: application/json
+
+### Завершение сессии
+POST {{AuthCookie_HostAddress}}/auth/logout
+
+### Проверка без cookie — ожидается 401
+GET {{AuthCookie_HostAddress}}/secure/data
+Accept: application/json
